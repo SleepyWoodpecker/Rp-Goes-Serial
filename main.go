@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"go.bug.st/serial"
@@ -15,7 +17,7 @@ var serial_port = "/dev/cu.usbserial-10"
 type MyStruct struct {
 	One 		uint32
 	Two 		uint32
-	Sheesh [32]byte
+	Sheesh [8]float32
 }
 
 func main() {
@@ -85,6 +87,13 @@ func reSync(port serial.Port) {
 }
 
 func process(messageQueue <-chan [40]byte) {
+	file, err := os.OpenFile("output.txt", os.O_WRONLY | os.O_CREATE, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	writer := bufio.NewWriter(file)
+
+
 	for tempBuff := range messageQueue {
 		var decodedStruct MyStruct
 		err := binary.Read(bytes.NewReader(tempBuff[:40]), binary.LittleEndian, &decodedStruct)
@@ -93,6 +102,20 @@ func process(messageQueue <-chan [40]byte) {
 			log.Fatal(err)
 		}
 
-		fmt.Printf("%v\n", decodedStruct)
+		message := fmt.Sprintf(
+			"%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d",
+			decodedStruct.Sheesh[0],
+			decodedStruct.Sheesh[1],
+			decodedStruct.Sheesh[2],
+			decodedStruct.Sheesh[3],
+			decodedStruct.Sheesh[4],
+			decodedStruct.Sheesh[5],
+			decodedStruct.Sheesh[6],
+			decodedStruct.Sheesh[7],
+			decodedStruct.One,
+			decodedStruct.Two,
+		)
+		fmt.Printf("%s\n", message)
+		fmt.Fprintf(writer, "%s\n", message)
 	}
 }
