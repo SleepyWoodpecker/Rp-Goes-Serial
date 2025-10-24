@@ -12,33 +12,50 @@ import (
 	"go.bug.st/serial"
 )
 
-var serial_port = "/dev/cu.usbserial-10"
+var serial_port_lv = "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B4:3A:45:B6:7E:D0-if00"
+var serial_port_hv = "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_B4:3A:45:B3:70:B0-if00"
+
+var lv_filename = "lv.csv"
+var hv_filename = "hv.csv"
 
 type MyStruct struct {
-	One 		uint32
-	Two 		uint32
+	One    uint32
+	Two    uint32
 	Sheesh [8]float32
 }
 
 func main() {
-	messageQueue := make(chan [40]byte, 20)
+	lv_message_queue := make(chan [40]byte, 20)
+	hv_message_queue := make(chan [40]byte, 20)
 
 	mode := &serial.Mode{
 		BaudRate: 460800,
 	}
-	port, err := serial.Open(serial_port, mode)
+	lv_port, err := serial.Open(serial_port_lv, mode)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer port.Close()
+	defer lv_port.Close()
 
-	port.SetReadTimeout(time.Duration(5 * float64(time.Millisecond)))
-	port.ResetInputBuffer()
+	hv_port, err := serial.Open(serial_port_hv, mode)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer hv_port.Close()
 
-	reSync(port)
+	lv_port.SetReadTimeout(time.Duration(5 * float64(time.Millisecond)))
+	lv_port.ResetInputBuffer()
 
-	go read(messageQueue, port)
-	process(messageQueue)
+	hv_port.SetReadTimeout(time.Duration(5 * float64(time.Millisecond)))
+	lv_port.ResetInputBuffer()
+
+	reSync(lv_port)
+	reSync(hv_port)
+
+	go read(lv_message_queue, lv_port)
+	go process(lv_message_queue, lv_filename, true)
+	go read(hv_message_queue, hv_port)
+	process(hv_message_queue, hv_filename, false)
 }
 
 func read(messageQueue chan<- [40]byte, port serial.Port) {
@@ -56,14 +73,14 @@ func read(messageQueue chan<- [40]byte, port serial.Port) {
 		}
 
 		// try checking the first int
-		var one uint32;
+		var one uint32
 		err := binary.Read(bytes.NewReader(tempBuff[:4]), binary.LittleEndian, &one)
 
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		if prev >= 0 && prev != int(one) - 1 {
+		if prev >= 0 && prev != int(one)-1 {
 			reSync(port)
 			prev = -1
 		} else {
@@ -71,7 +88,7 @@ func read(messageQueue chan<- [40]byte, port serial.Port) {
 		}
 
 		messageQueue <- [40]byte(tempBuff)
-	}	
+	}
 }
 
 func reSync(port serial.Port) {
@@ -86,13 +103,12 @@ func reSync(port serial.Port) {
 	}
 }
 
-func process(messageQueue <-chan [40]byte) {
-	file, err := os.OpenFile("output.txt", os.O_WRONLY | os.O_CREATE, 0644)
+func process(messageQueue <-chan [40]byte, filename string, isLv bool) {
+	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		log.Fatal(err)
 	}
 	writer := bufio.NewWriter(file)
-
 
 	for tempBuff := range messageQueue {
 		var decodedStruct MyStruct
@@ -102,19 +118,37 @@ func process(messageQueue <-chan [40]byte) {
 			log.Fatal(err)
 		}
 
-		message := fmt.Sprintf(
-			"%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d",
-			decodedStruct.Sheesh[0],
-			decodedStruct.Sheesh[1],
-			decodedStruct.Sheesh[2],
-			decodedStruct.Sheesh[3],
-			decodedStruct.Sheesh[4],
-			decodedStruct.Sheesh[5],
-			decodedStruct.Sheesh[6],
-			decodedStruct.Sheesh[7],
-			decodedStruct.One,
-			decodedStruct.Two,
-		)
+		var message string
+		if isLv {
+			message = fmt.Sprintf(
+				"LV: %d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
+				decodedStruct.One,
+				decodedStruct.Two,
+				decodedStruct.Sheesh[0],
+				decodedStruct.Sheesh[1],
+				decodedStruct.Sheesh[2],
+				decodedStruct.Sheesh[3],
+				decodedStruct.Sheesh[4],
+				decodedStruct.Sheesh[5],
+				decodedStruct.Sheesh[6],
+				decodedStruct.Sheesh[7],
+				
+			)
+		} else {
+			message = fmt.Sprintf(
+				"HV: %d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
+				decodedStruct.One,
+				decodedStruct.Two,
+				decodedStruct.Sheesh[0],
+				decodedStruct.Sheesh[1],
+				decodedStruct.Sheesh[2],
+				decodedStruct.Sheesh[3],
+				decodedStruct.Sheesh[4],
+				decodedStruct.Sheesh[5],
+				decodedStruct.Sheesh[6],
+				decodedStruct.Sheesh[7],
+			)
+		}
 		fmt.Printf("%s\n", message)
 		fmt.Fprintf(writer, "%s\n", message)
 	}
