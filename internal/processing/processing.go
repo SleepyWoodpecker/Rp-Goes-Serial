@@ -1,0 +1,77 @@
+package processing
+
+import (
+	"bufio"
+	"bytes"
+	"encoding/binary"
+	"fmt"
+	"os"
+
+	"go.uber.org/zap"
+)
+
+const DEFAULT_QUEUE_SIZE = 20
+
+type Processor struct {
+	Filename 			string
+	MessageQueue 	<-chan [40]byte
+	logger				*zap.Logger
+}
+
+type DataPacket struct {
+	PacketNumber  uint32
+	Timestamp    	uint32
+	RawReadings 	[8]float32
+}
+
+func NewProcessor(filename string, logger *zap.Logger) (*Processor) {
+	return &Processor{
+		Filename: 		filename,
+		MessageQueue: make(<-chan [40]byte, DEFAULT_QUEUE_SIZE),
+		logger: 			logger,	
+	}
+}
+
+func (p *Processor) ProcessData() error {
+	file, err := os.OpenFile(p.Filename, os.O_WRONLY | os.O_CREATE, 0644)
+
+	if err != nil {
+		panic(err)
+	}
+
+	writer := bufio.NewWriter(file)
+
+	for packet := range p.MessageQueue {
+		var decodedStruct DataPacket
+		err := binary.Read(bytes.NewReader(packet[:40]), binary.LittleEndian, &decodedStruct)
+		if err != nil {
+			// TODO: test this error by creating a decode error
+			p.logger.Warn(
+				"Error decoding byte packet: ", 
+				zap.Error(err),
+				zap.Int("packetLength", len(packet)),
+				zap.ByteString("rawBytes", packet[:]),
+			)
+			continue
+		}
+
+		// create string representation of data
+		message := fmt.Sprintf(
+			"%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
+			decodedStruct.PacketNumber,
+			decodedStruct.Timestamp,
+			decodedStruct.RawReadings[0],
+			decodedStruct.RawReadings[1],
+			decodedStruct.RawReadings[2],
+			decodedStruct.RawReadings[3],
+			decodedStruct.RawReadings[4],
+			decodedStruct.RawReadings[5],
+			decodedStruct.RawReadings[6],
+			decodedStruct.RawReadings[7],
+		)
+
+		fmt.Fprint(writer, message)
+	}
+
+	return nil
+}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sleepywoodpecker/rp-goes-serial/internal/logger"
 	"time"
 
 	"go.bug.st/serial"
@@ -17,6 +18,7 @@ var serial_port_hv = "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit
 
 var lv_filename = "lv.csv"
 var hv_filename = "hv.csv"
+var warnLogFilename = "warnlogs.log"
 
 type MyStruct struct {
 	One    uint32
@@ -25,6 +27,13 @@ type MyStruct struct {
 }
 
 func main() {
+	// instantiate the logger
+	logger, err := logger.NewLogger(warnLogFilename)
+	if err != nil {
+		panic(err)
+	}
+	defer logger.Sync()
+
 	lv_message_queue := make(chan [40]byte, 20)
 	hv_message_queue := make(chan [40]byte, 20)
 
@@ -121,7 +130,7 @@ func process(messageQueue <-chan [40]byte, filename string, isLv bool) {
 		var message string
 		if isLv {
 			message = fmt.Sprintf(
-				"LV: %d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
+				"%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
 				decodedStruct.One,
 				decodedStruct.Two,
 				decodedStruct.Sheesh[0],
@@ -134,9 +143,10 @@ func process(messageQueue <-chan [40]byte, filename string, isLv bool) {
 				decodedStruct.Sheesh[7],
 				
 			)
+			fmt.Printf("LV: %s\n", message)
 		} else {
 			message = fmt.Sprintf(
-				"HV: %d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
+				"%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
 				decodedStruct.One,
 				decodedStruct.Two,
 				decodedStruct.Sheesh[0],
@@ -148,8 +158,8 @@ func process(messageQueue <-chan [40]byte, filename string, isLv bool) {
 				decodedStruct.Sheesh[6],
 				decodedStruct.Sheesh[7],
 			)
+			fmt.Printf("HV: %s\n", message)
 		}
-		fmt.Printf("%s\n", message)
 		fmt.Fprintf(writer, "%s\n", message)
 	}
 }
