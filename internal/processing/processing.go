@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
+	"unsafe"
 
 	"go.uber.org/zap"
 )
@@ -24,10 +25,13 @@ type DataPacket struct {
 	RawReadings 	[8]float32
 }
 
-func NewProcessor(filename string, logger *zap.Logger) (*Processor) {
+const PacketSize = unsafe.Sizeof(DataPacket{})
+var StopSequence = [2]byte{'\r', '\n'}
+
+func NewProcessor(filename string, messageQueue <-chan [40]byte, logger *zap.Logger) (*Processor) {
 	return &Processor{
 		Filename: 		filename,
-		MessageQueue: make(<-chan [40]byte, DEFAULT_QUEUE_SIZE),
+		MessageQueue: messageQueue,
 		logger: 			logger,	
 	}
 }
@@ -36,7 +40,7 @@ func (p *Processor) ProcessData() error {
 	file, err := os.OpenFile(p.Filename, os.O_WRONLY | os.O_CREATE, 0644)
 
 	if err != nil {
-		panic(err)
+		p.logger.Fatal("Error opening a file", zap.Error(err), zap.String("outputFile", p.Filename))
 	}
 
 	writer := bufio.NewWriter(file)
@@ -47,9 +51,10 @@ func (p *Processor) ProcessData() error {
 		if err != nil {
 			// TODO: test this error by creating a decode error
 			p.logger.Warn(
-				"Error decoding byte packet: ", 
+				"Error decoding byte packet", 
 				zap.Error(err),
 				zap.Int("packetLength", len(packet)),
+				zap.String("outputFile", p.Filename),
 				zap.ByteString("rawBytes", packet[:]),
 			)
 			continue
