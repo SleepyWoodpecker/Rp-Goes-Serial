@@ -16,7 +16,6 @@ type rserial struct {
 	MessageQueue 				chan<- []byte 		// channels are all implicitly passed as pointers
 	tempBuff						[]byte
 	logger							*zap.Logger
-	hasBeenInitialized	bool
 	portName						string
 	stopSequence				[]byte
 	rawPacketSize				int
@@ -51,24 +50,16 @@ func NewRSerial(portName string, baudrate int, messageQueue chan<- []byte, logge
 	}
 }
 
-func (r *rserial) Initialize() {
-	if r.hasBeenInitialized {
-		r.logger.Fatal("rSerial object has already been initialized before", zap.String("portName", r.portName))
-	}
-
+func (r *rserial) initialize() {
 	r.SetReadTimeout(time.Duration(5 * float64(time.Millisecond)))
 	r.ResetInputBuffer()
-	r.hasBeenInitialized = true
+	r.sync()
 }
 
 // this is for the 
 func (r *rserial) Run() {
-	if !r.hasBeenInitialized {
-		r.logger.Fatal("rSerial object has not been initialized yet!", zap.String("portName", r.portName))
-	}
-
 	// sync the serial port
-	r.sync()
+	r.initialize()
 
 	for {
 		err := r.ReadPacket()
@@ -105,6 +96,7 @@ func (r *rserial) ReadPacket() error {
 		}
 	}
 
+	r.MessageQueue <- r.tempBuff
 	return nil
 }
 

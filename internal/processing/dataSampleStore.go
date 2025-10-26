@@ -18,11 +18,11 @@ func NewDataSampleStore() *DataSampleStore {
 	return &DataSampleStore{}
 }
 
-func (d *DataSampleStore) UpdateSampleStore(newData [8]float32) {
+func (d *DataSampleStore) UpdateSampleStore(newData []float32) {
 	d.rawReadingMutex.Lock()
 	defer d.rawReadingMutex.Unlock()
 
-	copy(d.RawReadings[:], newData[:])
+	copy(d.RawReadings[:], newData)
 }
 
 func (d *DataSampleStore) GetReadingFromSampleStore() [8]float32 {

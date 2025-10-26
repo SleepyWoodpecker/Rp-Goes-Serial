@@ -16,8 +16,9 @@ const DEFAULT_QUEUE_SIZE = 20
 
 type Processor struct {
 	Filename 			string
-	MessageQueue 	<-chan [40]byte
+	MessageQueue 	<-chan []byte
 	logger				*zap.Logger
+	dataStore 		*DataSampleStore
 }
 
 type DataPacket struct {
@@ -29,11 +30,12 @@ type DataPacket struct {
 const PacketSize = unsafe.Sizeof(DataPacket{})
 var StopSequence = [2]byte{'\r', '\n'}
 
-func NewProcessor(filename string, messageQueue <-chan [40]byte, logger *zap.Logger) (*Processor) {
+func NewProcessor(filename string, messageQueue <-chan []byte, logger *zap.Logger, dataStore *DataSampleStore) (*Processor) {
 	return &Processor{
 		Filename: 		filename,
 		MessageQueue: messageQueue,
 		logger: 			logger,	
+		dataStore: 		dataStore,	
 	}
 }
 
@@ -87,5 +89,7 @@ func (p *Processor) ProcessPacket(packet []byte, outStream io.Writer) error {
 	)
 
 	fmt.Fprint(outStream, message)
+	p.dataStore.UpdateSampleStore(decodedStruct.RawReadings[:])
+
 	return nil
 }
