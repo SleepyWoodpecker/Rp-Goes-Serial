@@ -99,7 +99,7 @@ func (p *Processor) ProcessPacket(packet []byte, outStream io.Writer) error {
 	)
 
 	fmt.Fprint(outStream, message)
-	p.dataStore.UpdateSampleStore(decodedStruct.RawReadings[:])
+	p.dataStore.UpdateSampleStore(decodedStruct.RawReadings[:], int(decodedStruct.Timestamp))
 
 	return nil
 }

@@ -12,10 +12,12 @@ import (
 const SamplingChannelName = "pressurevals"
 
 type sampler struct {
-	samplingFrequency 	time.Duration
-	udpConn 						*net.UDPConn
-	storesToSampleFrom	[](*DataSampleStore)
-	logger 							*zap.Logger
+	samplingFrequency 		time.Duration
+	udpConn 							*net.UDPConn
+	storesToSampleFrom		[](*DataSampleStore)
+	logger 								*zap.Logger
+	firstBoardTimestamp		int										// this is the first timestamp received from the ESP32
+	samplerInitTimestamp 	int64
 }
 
 func NewSampler(samplingFrequency time.Duration, udpConn *net.UDPConn, stores [](*DataSampleStore), logger *zap.Logger) *sampler {
@@ -24,16 +26,29 @@ func NewSampler(samplingFrequency time.Duration, udpConn *net.UDPConn, stores []
 		udpConn: udpConn,
 		storesToSampleFrom: stores,
 		logger: logger,
+		firstBoardTimestamp: 0,
+		samplerInitTimestamp: time.Now().UnixNano(),
 	}
 }
 
 /* HV ports come before LV ports */
 func (s *sampler) SampleAndLog(sampleBuffer []float32) {
+	var lastBoardTimeStamp int
+	var lastSampleFromStore [8]float32
+
 	for idx, store := range s.storesToSampleFrom {
 		writeStartIdx := idx * NumReadingsPerPacket
-		lastSampleFromStore := store.GetReadingFromSampleStore()
+		lastSampleFromStore, lastBoardTimeStamp = store.GetReadingFromSampleStore()
 		copy(sampleBuffer[writeStartIdx : writeStartIdx + NumReadingsPerPacket], lastSampleFromStore[:])
 	}
+
+	// set a base timestamp if there has not been one yet
+	if s.firstBoardTimestamp == 0 {
+		s.firstBoardTimestamp = lastBoardTimeStamp
+	}
+
+	// get the offset from the first reading
+	timeSinceStartNs := int64(lastBoardTimeStamp - s.firstBoardTimestamp) * 1000000
 
 	// format the string as an influx string to send to the grafana connection
 	influxString := SamplingChannelName + " "
@@ -41,13 +56,11 @@ func (s *sampler) SampleAndLog(sampleBuffer []float32) {
 		influxString += fmt.Sprintf("pt%d=%.2f,", idx, ptReading)
 	}
 	influxString = influxString[:len(influxString) - 1]
-	influxString += fmt.Sprintf(" %d", time.Now().UnixNano())
+	influxString += fmt.Sprintf(" %d", (s.samplerInitTimestamp + int64(timeSinceStartNs)))
 
 	err := s.sendToUDPConn(&influxString)
 	if err != nil {
-		s.logger.Warn("[sampler] Error writing data to UDP connection", zap.Error(err))
-	} else {
-		s.logger.Info("[sampler] collected sample", zap.String("influxString", influxString))
+		s.logger.Warn("[sampler] Error writing data to UDP connection", zap.Error(err), zap.String("influxString", influxString))
 	}
 }
 
