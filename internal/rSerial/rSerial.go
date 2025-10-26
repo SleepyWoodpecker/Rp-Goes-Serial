@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sleepywoodpecker/rp-goes-serial/internal/processing"
 	"time"
 
 	"go.bug.st/serial"
@@ -27,7 +28,7 @@ type OutOfSyncError struct {
 }
 
 func (e *OutOfSyncError) Error() string {
-	return fmt.Sprintf("[rserial] incorrect stop sequence detected: %v", e.ByteSequence)
+	return fmt.Sprintf("Incorrect stop sequence detected %v", e.ByteSequence)
 }
 
 func NewRSerial(portName string, baudrate int, messageQueue chan<- []byte, logger *zap.Logger, rawPacketSize int, stopSequence []byte) *rserial {
@@ -95,7 +96,7 @@ func (r *rserial) ReadPacket() error {
 	}
 
 	// validate that the packet is valid by checking the last 2 characters of the packet
-	if len(r.tempBuff) != r.rawPacketSize || !bytes.Equal(r.tempBuff[r.rawPacketSize - 2:], r.stopSequence) {
+	if !bytes.Equal(r.tempBuff[r.rawPacketSize - 2:], r.stopSequence) {
 		byteSequenceCopy := make([]byte, r.rawPacketSize)
 		copy(byteSequenceCopy[:], r.tempBuff[:])
 		
@@ -110,12 +111,17 @@ func (r *rserial) ReadPacket() error {
 
 func (r *rserial) sync() {
 	r.logger.Warn("Resyncing serial port", zap.String("portName", r.portName))
-	onebyte := make([]byte, 1)
+	twoBytes := [2]byte{ 0x0, 0x0 }
+	oneByte := [1]byte{}
 
-	for onebyte[0] != r.stopSequence[len(r.stopSequence) - 1] {
-		_, err := r.Read(onebyte)
+	for !bytes.Equal(twoBytes[:], processing.StopSequence[:]) {
+		_, err := r.Read(oneByte[:])
 		if err != nil {
 			r.logger.Warn("Error while resyncing serial port", zap.Error(err) ,zap.String("portName", r.portName))
 		}
+
+		// update the two byte sequence
+		twoBytes[0] = twoBytes[1]
+		twoBytes[1] = oneByte[0]
 	}
 }
