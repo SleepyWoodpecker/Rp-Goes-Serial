@@ -78,6 +78,8 @@ func (r *rserial) Run(ctx context.Context) {
 				} else {
 					r.logger.Warn("Error while attempting to read packet from serial", zap.Error(err) ,zap.String("portName", r.portName))
 				}
+
+				r.sync()
 			}
 		}
 	}
