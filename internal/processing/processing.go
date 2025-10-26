@@ -85,7 +85,7 @@ func (p *Processor) ProcessPacket(packet []byte, outStream io.Writer) error {
 
 	// create string representation of data
 	message := fmt.Sprintf(
-		"%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
+		"%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n",
 		decodedStruct.PacketNumber,
 		decodedStruct.Timestamp,
 		decodedStruct.RawReadings[0],
