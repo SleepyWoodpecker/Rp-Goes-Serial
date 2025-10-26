@@ -60,13 +60,15 @@ func main() {
 	}
 
 	// initialize the serial connections
+	dataPacketSize := int(processing.PacketSize) + 2
+
 	hvMessageQueue := make(chan []byte, MESSAGE_QUEUE_LENGTH)
-	hvSerial := rserial.NewRSerial(PORT_HV, BAUDRATE, hvMessageQueue, logger, int(processing.PacketSize), STOP_SEQUENCE)
+	hvSerial := rserial.NewRSerial(PORT_HV, BAUDRATE, hvMessageQueue, logger, dataPacketSize, STOP_SEQUENCE)
 	defer hvSerial.Close()
 	hvProcessor := processing.NewProcessor(HV_RAW_LOG_FILE, hvMessageQueue, logger, sampleStore[0])
 
 	lvMessageQueue := make(chan []byte, MESSAGE_QUEUE_LENGTH)
-	lvSerial := rserial.NewRSerial(PORT_LV, BAUDRATE, lvMessageQueue, logger, int(processing.PacketSize), STOP_SEQUENCE)
+	lvSerial := rserial.NewRSerial(PORT_LV, BAUDRATE, lvMessageQueue, logger, dataPacketSize, STOP_SEQUENCE)
 	defer lvSerial.Close()
 	lvProcessor := processing.NewProcessor(LV_RAW_LOG_FILE, lvMessageQueue, logger, sampleStore[1])
 
@@ -82,6 +84,6 @@ func main() {
 
 	<-sigCh
 	cancel()
-
+	logger.Info("[main] exiting from serial reader...")
 	time.Sleep(500 * time.Millisecond)
 }

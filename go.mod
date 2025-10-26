@@ -1,6 +1,6 @@
 module sleepywoodpecker/rp-goes-serial
 
-go 1.24.5
+go 1.23.4
 
 require (
 	github.com/creack/goselect v0.1.2 // indirect

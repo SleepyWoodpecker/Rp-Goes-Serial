@@ -112,7 +112,7 @@ func (r *rserial) sync() {
 	r.logger.Warn("Resyncing serial port", zap.String("portName", r.portName))
 	onebyte := make([]byte, 1)
 
-	for onebyte[0] != r.stopSequence[r.rawPacketSize - 1] {
+	for onebyte[0] != r.stopSequence[len(r.stopSequence) - 1] {
 		_, err := r.Read(onebyte)
 		if err != nil {
 			r.logger.Warn("Error while resyncing serial port", zap.Error(err) ,zap.String("portName", r.portName))
