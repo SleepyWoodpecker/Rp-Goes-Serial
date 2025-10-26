@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"net"
+	"os"
+	"os/signal"
 	"sleepywoodpecker/rp-goes-serial/internal/logger"
 	"sleepywoodpecker/rp-goes-serial/internal/processing"
 	rserial "sleepywoodpecker/rp-goes-serial/internal/rSerial"
+	"syscall"
 	"time"
 )
 
@@ -24,6 +28,13 @@ const MESSAGE_QUEUE_LENGTH = 20
 var STOP_SEQUENCE = []byte{'\r', '\n'}
 
 func main() {
+	// context handler for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
 	// first initialize the main logger
 	logger, err := logger.NewLogger(LOG_FILE_PATH)
 	if err != nil {	
@@ -62,10 +73,15 @@ func main() {
 	sampler := processing.NewSampler(100 * time.Millisecond, udpConn, sampleStore, logger)
 
 	// run everything
-	go hvProcessor.Run()
-	go lvProcessor.Run()
-	go hvSerial.Run()
-	go lvSerial.Run()
+	go hvProcessor.Run(ctx)
+	go lvProcessor.Run(ctx)
+	go hvSerial.Run(ctx)
+	go lvSerial.Run(ctx)
 	
-	sampler.Run()
+	go sampler.Run(ctx)
+
+	<-sigCh
+	cancel()
+
+	time.Sleep(500 * time.Millisecond)
 }

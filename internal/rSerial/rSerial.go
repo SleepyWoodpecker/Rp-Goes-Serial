@@ -3,6 +3,7 @@ package rserial
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -57,18 +58,25 @@ func (r *rserial) initialize() {
 }
 
 // this is for the 
-func (r *rserial) Run() {
+func (r *rserial) Run(ctx context.Context) {
 	// sync the serial port
 	r.initialize()
 
 	for {
-		err := r.ReadPacket()
-		if err != nil {
-			var oosError *OutOfSyncError
-			if errors.As(err, &oosError) {
-				r.logger.Warn("Error while attempting to read packet from serial", zap.Error(err) ,zap.String("portName", r.portName), zap.ByteString("payload", oosError.ByteSequence))
-			} else {
-				r.logger.Warn("Error while attempting to read packet from serial", zap.Error(err) ,zap.String("portName", r.portName))
+		select {
+		case <- ctx.Done():
+			r.logger.Info("[rserial] exiting from rserial read loop", zap.String("portName", r.portName))
+			close(r.MessageQueue)
+			return
+		default:
+			err := r.ReadPacket()
+			if err != nil {
+				var oosError *OutOfSyncError
+				if errors.As(err, &oosError) {
+					r.logger.Warn("Error while attempting to read packet from serial", zap.Error(err) ,zap.String("portName", r.portName), zap.ByteString("payload", oosError.ByteSequence))
+				} else {
+					r.logger.Warn("Error while attempting to read packet from serial", zap.Error(err) ,zap.String("portName", r.portName))
+				}
 			}
 		}
 	}

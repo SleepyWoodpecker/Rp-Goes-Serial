@@ -3,6 +3,7 @@ package processing
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -39,30 +40,39 @@ func NewProcessor(filename string, messageQueue <-chan []byte, logger *zap.Logge
 	}
 }
 
-func (p *Processor) Run() error {
+func (p *Processor) Run(ctx context.Context) error {
 	file, err := os.OpenFile(p.Filename, os.O_WRONLY | os.O_CREATE, 0644)
-
 	if err != nil {
-		p.logger.Fatal("Error opening a file", zap.Error(err), zap.String("outputFile", p.Filename))
+		p.logger.Fatal("[processor] error opening a file", zap.Error(err), zap.String("outputFile", p.Filename))
 	}
+	defer file.Close()
+
 
 	writer := bufio.NewWriter(file)
+	defer writer.Flush()
 
-	for packet := range p.MessageQueue {
-		err := p.ProcessPacket(packet[:], writer) 
-		if err != nil {
-			p.logger.Warn(
-				"Error decoding byte packet", 
-				zap.Error(err),
-				zap.Int("packetLength", len(packet)),
-				zap.String("outputFile", p.Filename),
-				zap.ByteString("rawBytes", packet[:]),
-			)
-			continue
+	for {
+		select {
+		case packet, ok := <-p.MessageQueue:
+			if !ok {
+				p.logger.Info("[processor] message queue closed", zap.String("outputFile", p.Filename))
+				return nil
+			}
+
+			if err := p.ProcessPacket(packet[:], writer); err != nil {
+				p.logger.Warn(
+					"[processor] error decoding byte packet", 
+					zap.Error(err),
+					zap.Int("packetLength", len(packet)),
+					zap.String("outputFile", p.Filename),
+					zap.ByteString("rawBytes", packet[:]),
+				)
+			}
+		case <-ctx.Done():
+			p.logger.Info("[processor] received shutdown signal", zap.String("outputFile", p.Filename))
+			return nil
 		}
 	}
-
-	return nil
 }
 
 func (p *Processor) ProcessPacket(packet []byte, outStream io.Writer) error {

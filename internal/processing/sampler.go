@@ -1,6 +1,7 @@
 package processing
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"time"
@@ -49,11 +50,17 @@ func (s *sampler) SampleAndLog(sampleBuffer []float32) {
 	}
 }
 
-func (s *sampler) Run() {
+func (s *sampler) Run(ctx context.Context) {
 	sampleBuffer := make([]float32, len(s.storesToSampleFrom) * NumReadingsPerPacket)
+	ticker := time.NewTicker(s.samplingFrequency)
 
-	for range time.Tick(s.samplingFrequency) {
-		s.SampleAndLog(sampleBuffer)
+	for {
+		select {
+		case <-ticker.C:
+			s.SampleAndLog(sampleBuffer)
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 
