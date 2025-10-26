@@ -3,6 +3,8 @@ package rserial
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"time"
 
 	"go.bug.st/serial"
@@ -18,6 +20,14 @@ type rserial struct {
 	portName						string
 	stopSequence				[]byte
 	rawPacketSize				int
+}
+
+type OutOfSyncError struct {
+	ByteSequence 	[]byte
+}
+
+func (e *OutOfSyncError) Error() string {
+	return fmt.Sprintf("[rserial] incorrect stop sequence detected: %v", e.ByteSequence)
 }
 
 func NewRSerial(portName string, baudrate int, messageQueue chan<- []byte, logger *zap.Logger, rawPacketSize int, stopSequence []byte) *rserial {
@@ -52,7 +62,7 @@ func (r *rserial) Initialize() {
 }
 
 // this is for the 
-func (r *rserial) ReadPacket() {
+func (r *rserial) Run() {
 	if !r.hasBeenInitialized {
 		r.logger.Fatal("rSerial object has not been initialized yet!", zap.String("portName", r.portName))
 	}
@@ -61,23 +71,41 @@ func (r *rserial) ReadPacket() {
 	r.sync()
 
 	for {
-		count := 0
-		for count < r.rawPacketSize {
-			// TODO: find out what happens if this: (1) reads < 42 first (2) goes beyond the stop sequence into the next packet
-			// go out of sync?
-			n, err := r.Read(r.tempBuff[count:])
-			if err != nil {
+		err := r.ReadPacket()
+		if err != nil {
+			var oosError *OutOfSyncError
+			if errors.As(err, &oosError) {
+				r.logger.Warn("Error while attempting to read packet from serial", zap.Error(err) ,zap.String("portName", r.portName), zap.ByteString("payload", oosError.ByteSequence))
+			} else {
 				r.logger.Warn("Error while attempting to read packet from serial", zap.Error(err) ,zap.String("portName", r.portName))
-				break
 			}
-			count += n
-		}
-
-		// validate that the packet is valid by checking the last 2 characters of the packet
-		if len(r.tempBuff) != r.rawPacketSize || !bytes.Equal(r.tempBuff[r.rawPacketSize - 2:], r.stopSequence) {
-			r.sync()
 		}
 	}
+}
+
+func (r *rserial) ReadPacket() error {
+	count := 0
+	for count < r.rawPacketSize {
+		// TODO: find out what happens if this: (1) reads < 42 first (2) goes beyond the stop sequence into the next packet
+		// go out of sync?
+		n, err := r.Read(r.tempBuff[count:])
+		if err != nil {
+			return err
+		}
+		count += n
+	}
+
+	// validate that the packet is valid by checking the last 2 characters of the packet
+	if len(r.tempBuff) != r.rawPacketSize || !bytes.Equal(r.tempBuff[r.rawPacketSize - 2:], r.stopSequence) {
+		byteSequenceCopy := make([]byte, r.rawPacketSize)
+		copy(byteSequenceCopy[:], r.tempBuff[:])
+		
+		return &OutOfSyncError{
+			ByteSequence: byteSequenceCopy,
+		}
+	}
+
+	return nil
 }
 
 func (r *rserial) sync() {

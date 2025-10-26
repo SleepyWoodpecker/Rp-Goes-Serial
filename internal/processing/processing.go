@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
 	"unsafe"
 
@@ -36,7 +37,7 @@ func NewProcessor(filename string, messageQueue <-chan [40]byte, logger *zap.Log
 	}
 }
 
-func (p *Processor) ProcessData() error {
+func (p *Processor) Run() error {
 	file, err := os.OpenFile(p.Filename, os.O_WRONLY | os.O_CREATE, 0644)
 
 	if err != nil {
@@ -46,10 +47,8 @@ func (p *Processor) ProcessData() error {
 	writer := bufio.NewWriter(file)
 
 	for packet := range p.MessageQueue {
-		var decodedStruct DataPacket
-		err := binary.Read(bytes.NewReader(packet[:40]), binary.LittleEndian, &decodedStruct)
+		err := p.ProcessPacket(packet[:], writer) 
 		if err != nil {
-			// TODO: test this error by creating a decode error
 			p.logger.Warn(
 				"Error decoding byte packet", 
 				zap.Error(err),
@@ -59,24 +58,34 @@ func (p *Processor) ProcessData() error {
 			)
 			continue
 		}
-
-		// create string representation of data
-		message := fmt.Sprintf(
-			"%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
-			decodedStruct.PacketNumber,
-			decodedStruct.Timestamp,
-			decodedStruct.RawReadings[0],
-			decodedStruct.RawReadings[1],
-			decodedStruct.RawReadings[2],
-			decodedStruct.RawReadings[3],
-			decodedStruct.RawReadings[4],
-			decodedStruct.RawReadings[5],
-			decodedStruct.RawReadings[6],
-			decodedStruct.RawReadings[7],
-		)
-
-		fmt.Fprint(writer, message)
 	}
 
+	return nil
+}
+
+func (p *Processor) ProcessPacket(packet []byte, outStream io.Writer) error {
+	var decodedStruct DataPacket
+	err := binary.Read(bytes.NewReader(packet[:40]), binary.LittleEndian, &decodedStruct)
+	if err != nil {
+		// TODO: test this error by creating a decode error
+		return err
+	}
+
+	// create string representation of data
+	message := fmt.Sprintf(
+		"%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
+		decodedStruct.PacketNumber,
+		decodedStruct.Timestamp,
+		decodedStruct.RawReadings[0],
+		decodedStruct.RawReadings[1],
+		decodedStruct.RawReadings[2],
+		decodedStruct.RawReadings[3],
+		decodedStruct.RawReadings[4],
+		decodedStruct.RawReadings[5],
+		decodedStruct.RawReadings[6],
+		decodedStruct.RawReadings[7],
+	)
+
+	fmt.Fprint(outStream, message)
 	return nil
 }
