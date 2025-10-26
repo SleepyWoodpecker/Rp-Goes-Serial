@@ -38,8 +38,9 @@ func (s *sampler) SampleAndLog(sampleBuffer []float32) {
 	// format the string as an influx string to send to the grafana connection
 	influxString := SamplingChannelName + " "
 	for idx, ptReading := range sampleBuffer {
-		influxString += fmt.Sprintf("pt%d=%.2f", idx, ptReading)
+		influxString += fmt.Sprintf("pt%d=%.2f,", idx, ptReading)
 	}
+	influxString = influxString[:len(influxString) - 1]
 	influxString += fmt.Sprintf(" %d", time.Now().UnixNano())
 
 	err := s.sendToUDPConn(&influxString)
