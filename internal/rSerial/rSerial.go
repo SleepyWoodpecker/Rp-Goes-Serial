@@ -95,17 +95,19 @@ func (r *rserial) ReadPacket() error {
 		count += n
 	}
 
+	// copy array rather than sending r.tempBuff which would point to the underlying array all the time
+	// this may put some more load on the gc but that is okay for now
+	byteSequenceCopy := make([]byte, r.rawPacketSize)
+	copy(byteSequenceCopy[:], r.tempBuff[:])
+
 	// validate that the packet is valid by checking the last 2 characters of the packet
 	if !bytes.Equal(r.tempBuff[r.rawPacketSize - 2:], r.stopSequence) {
-		byteSequenceCopy := make([]byte, r.rawPacketSize)
-		copy(byteSequenceCopy[:], r.tempBuff[:])
-		
 		return &OutOfSyncError{
 			ByteSequence: byteSequenceCopy,
 		}
 	}
 
-	r.MessageQueue <- r.tempBuff
+	r.MessageQueue <- byteSequenceCopy
 	return nil
 }
 
