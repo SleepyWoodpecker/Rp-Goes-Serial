@@ -17,10 +17,6 @@ type DataSampleStore struct {
 	rawReadingMutex	sync.Mutex
 }
 
-func NewDataSampleStore() *DataSampleStore {
-	return &DataSampleStore{}
-}
-
 func (d *DataSampleStore) UpdateSampleStore(newData []float32, boardTimeStamp int) {
 	d.rawReadingMutex.Lock()
 	defer d.rawReadingMutex.Unlock()

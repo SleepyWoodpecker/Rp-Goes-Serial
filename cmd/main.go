@@ -56,7 +56,7 @@ func main() {
 	// initialize the sample store
 	sampleStore := make([](*processing.DataSampleStore), 2)
 	for i := range sampleStore {
-		sampleStore[i] = processing.NewDataSampleStore()
+		sampleStore[i] = &processing.DataSampleStore{}
 	}
 
 	// initialize the serial connections
