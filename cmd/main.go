@@ -27,6 +27,21 @@ const BAUDRATE = 460800
 const MESSAGE_QUEUE_LENGTH = 20
 var STOP_SEQUENCE = []byte{'\r', '\n'}
 
+// calibration coefficients: y = ax + b
+var ACoeffs = [16]float32 { 
+	1, 1, 1, 1, 
+	1, 1, 1, 1, 
+	1, 1, 1, 1, 
+	1, 1, 1, 1,
+}
+
+var BCoeffs = [16]float32 {
+	0, 0, 0, 0, 
+	0, 0, 0, 0, 
+	0, 0, 0, 0, 
+	0, 0, 0, 0,
+}
+
 func main() {
 	// context handler for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -65,12 +80,28 @@ func main() {
 	hvMessageQueue := make(chan []byte, MESSAGE_QUEUE_LENGTH)
 	hvSerial := rserial.NewRSerial(PORT_HV, BAUDRATE, hvMessageQueue, logger, dataPacketSize, STOP_SEQUENCE)
 	defer hvSerial.Close()
-	hvProcessor := processing.NewProcessor(HV_RAW_LOG_FILE, hvMessageQueue, logger, sampleStore[0])
+	hvProcessor := processing.NewProcessor(
+		HV_RAW_LOG_FILE, 
+		HV_CAL_LOG_FILE, 
+		hvMessageQueue, 
+		logger, 
+		sampleStore[0], 
+		[processing.NumPtsPerBoard]float32(ACoeffs[:processing.NumPtsPerBoard]), 
+		[processing.NumPtsPerBoard]float32(BCoeffs[:processing.NumPtsPerBoard]),
+	)
 
 	lvMessageQueue := make(chan []byte, MESSAGE_QUEUE_LENGTH)
 	lvSerial := rserial.NewRSerial(PORT_LV, BAUDRATE, lvMessageQueue, logger, dataPacketSize, STOP_SEQUENCE)
 	defer lvSerial.Close()
-	lvProcessor := processing.NewProcessor(LV_RAW_LOG_FILE, lvMessageQueue, logger, sampleStore[1])
+	lvProcessor := processing.NewProcessor(
+		LV_RAW_LOG_FILE, 
+		LV_CAL_LOG_FILE, 
+		lvMessageQueue, 
+		logger, 
+		sampleStore[1], 
+		[processing.NumPtsPerBoard]float32(ACoeffs[processing.NumPtsPerBoard:]), 
+		[processing.NumPtsPerBoard]float32(BCoeffs[processing.NumPtsPerBoard:]),
+	)
 
 	sampler := processing.NewSampler(100 * time.Millisecond, udpConn, sampleStore, logger)
 
