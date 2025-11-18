@@ -74,24 +74,21 @@ func (p *Processor) Run(ctx context.Context) error {
 
 	for {
 		select {
-		case packet, ok := <-p.MessageQueue:
-			if !ok {
-				p.logger.Info("[processor] message queue closed", zap.String("rawFileName", p.RawFileName))
-				return nil
-			}
-
-			if err := p.ProcessPacket(packet[:], rawFileWriter, calFileWriter); err != nil {
-				p.logger.Warn(
-					"[processor] error decoding byte packet", 
-					zap.Error(err),
-					zap.Int("packetLength", len(packet)),
-					zap.String("rawFileName", p.RawFileName),
-					zap.ByteString("rawBytes", packet[:]),
-				)
-			}
 		case <-ctx.Done():
 			p.logger.Info("[processor] received shutdown signal", zap.String("rawFileName", p.RawFileName))
 			return nil
+		default: 
+		}
+
+		packet := <-p.MessageQueue
+		if err := p.ProcessPacket(packet[:], rawFileWriter, calFileWriter); err != nil {
+			p.logger.Warn(
+				"[processor] error decoding byte packet", 
+				zap.Error(err),
+				zap.Int("packetLength", len(packet)),
+				zap.String("rawFileName", p.RawFileName),
+				zap.ByteString("rawBytes", packet[:]),
+			)
 		}
 	}
 }

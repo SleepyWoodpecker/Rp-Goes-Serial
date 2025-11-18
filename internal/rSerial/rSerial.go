@@ -70,17 +70,18 @@ func (r *rserial) Run(ctx context.Context) {
 			close(r.MessageQueue)
 			return
 		default:
-			err := r.ReadPacket()
-			if err != nil {
-				var oosError *OutOfSyncError
-				if errors.As(err, &oosError) {
-					r.logger.Warn("Error while attempting to read packet from serial", zap.Error(err) ,zap.String("portName", r.portName), zap.ByteString("payload", oosError.ByteSequence))
-				} else {
-					r.logger.Warn("Error while attempting to read packet from serial", zap.Error(err) ,zap.String("portName", r.portName))
-				}
+		}
 
-				r.sync()
+		err := r.ReadPacket()
+		if err != nil {
+			var oosError *OutOfSyncError
+			if errors.As(err, &oosError) {
+				r.logger.Warn("Error while attempting to read packet from serial", zap.Error(err) ,zap.String("portName", r.portName), zap.ByteString("payload", oosError.ByteSequence))
+			} else {
+				r.logger.Warn("Error while attempting to read packet from serial", zap.Error(err) ,zap.String("portName", r.portName))
 			}
+
+			r.sync()
 		}
 	}
 }
